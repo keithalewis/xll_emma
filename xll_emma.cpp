@@ -26,7 +26,8 @@ XLL_CONST(LPOPER, EMMA_ENUM_ICE, (LPOPER)&ICEDailyYieldCurve, "EMMA ICE daily yi
 
 // in memory database
 sqlite::db db("");
-sqlite::db emma_db();
+// int add-in directory
+sqlite::db emma_db;
 
 int create_db()
 {
@@ -34,32 +35,29 @@ int create_db()
 
 	ensure(SQLITE_DONE == stmt.exec("DROP TABLE IF EXISTS emma"));
 
-	return stmt.exec("CREATE TABLE emma (curve TEXT, date FLOAT, data JSON)"));
+	return stmt.exec("CREATE TABLE emma (curve TEXT, date FLOAT, data JSON)");
 }
-int open_emma_db()
+int create_emma_db()
 {
-	emma_db.open("emma.db");
+	OPER module = Excel(xlGetName);
+	auto view = xll::view(module);
+	auto i = view.find_last_of(L"\\/");
+	auto dir = std::wstring(view.substr(0, i + 1)) + L"emma.db";
+
+	emma_db.open(dir.c_str());
 	sqlite::stmt stmt(emma_db);
 
-	return emma_db.exec(
+	return stmt.exec(
 		"CREATE TABLE IF NOT EXISTS data("
-		"curve TEXT, date FLOAT, year FLOAT, rate FLOAT),"
-		"PRIMARY KEY(curve, date, year)"
+		"curve TEXT, date FLOAT, year FLOAT, rate FLOAT, "
+		"PRIMARY KEY(curve, date, year))"
 	);
 }
 
 Auto<Open> xao_emma_db([] {
 	try {
-		create_db();
-
-		// local database
-		OPER module = Excel(xlGetName);
-		auto view = xll::view(module);
-		auto i = view.find_last_of(L"\\/");
-		auto dir = view.substr(0, i + 1);
-		ensure(SetCurrentDirectory(std::string(dir).c_str()));
-
-		ensure(SQLITE_OK == open_emma_db());
+		ensure(SQLITE_DONE == create_db());
+		ensure(SQLITE_DONE == create_emma_db());
 	}
 	catch (const std::exception& ex) {
 		XLL_ERROR(ex.what());
@@ -70,70 +68,76 @@ Auto<Open> xao_emma_db([] {
 
 int insert_curve_row(const std::string_view curve, double date, std::wstring_view data)
 {
-	try {
-		ensure(curve_map.contains(std::string(curve)));
+	ensure(curve_map.contains(std::string(curve)));
 
-		sqlite::stmt stmt(::db);
-		stmt.prepare("INSERT INTO emma VALUES(?, ?, ?)");
-		stmt.bind(1, curve);
-		stmt.bind(2, date);
-		stmt.bind(3, data);
-		ensure(SQLITE_DONE == stmt.step());
-	}
-	catch (const std::exception& ex) {
-		XLL_ERROR(ex.what());
-
-		return 0;
-	}
-
-	return 1;
+	sqlite::stmt stmt(::db);
+	stmt.prepare("INSERT INTO emma VALUES(?, ?, ?)");
+	stmt.bind(1, curve);
+	stmt.bind(2, date);
+	stmt.bind(3, data);
+		
+	return stmt.step();
 }
+
+
+// {"Series":[{"Points":[{"X":"1","Y":"2.896"},...,{"X":"30","Y":"3.660"}]}]}
+constexpr const char* sql_select
+= "SELECT json_extract(value, '$.X'), json_extract(value, '$.Y') "
+"FROM emma, json_each(json_extract(data, '$.Series[0].Points')) "
+"WHERE curve = ? AND date = ?";
 
 int insert_curve_date(const std::string_view name, double date)
 {
-	try {
-		const auto i = curve_map.find(std::string(name));
-		ensure(i != curve_map.end());
-		const OPER& url = i->second;
-		OPER data = Excel(xlfWebservice, url & Excel(xlfText, date, L"mm/dd/yyyy"));
-		// {"Series":[{"Points":[{"X":"1","Y":"2.903"},...]]
-		if (!data || view(data).starts_with(L"{\"Series\":[]")) {
-			return 0; // no data
-		}
-
-		insert_curve_row(name, date, view(data));
-	}
-	catch (const std::exception& ex) {
-		XLL_ERROR(ex.what());
-
-		return 0;
+	const auto i = curve_map.find(std::string(name));
+	ensure(i != curve_map.end());
+	const OPER& url = i->second;
+	// TODO: async
+	OPER data = Excel(xlfWebservice, url & Excel(xlfText, date, L"mm/dd/yyyy"));
+	// {"Series":[{"Points":[{"X":"1","Y":"2.903"},...]]
+	if (!data || view(data).starts_with(L"{\"Series\":[]")) {
+		return 0; // no data
 	}
 
-	return 1;
+	return insert_curve_row(name, date, view(data));
 }
 
-// {"Series":[{"Points":[{"X":"1","Y":"2.896"},...,{"X":"30","Y":"3.660"}]}]}
-constexpr const char* sql_select 
-	= "SELECT json_extract(value, '$.X'), json_extract(value, '$.Y') "
-	  "FROM emma, json_each(json_extract(data, '$.Series[0].Points')) "
-	  "WHERE curve = ? AND date = ?";
+int copy_emma_data(const char* name, double date)
+{
+	// Add to emma data.
+	sqlite::stmt stmt(db);
+	stmt.prepare(sql_select);
+	stmt.bind(1, name);
+	stmt.bind(2, date);
+	
+	sqlite::stmt emma_stmt(emma_db);
+	emma_stmt.prepare("INSERT INTO data VALUES(?, ?, ?, ?)");
+	emma_stmt.bind(1, name);
+	emma_stmt.bind(2, date);
+	int ret;
+	while (SQLITE_ROW == (ret = stmt.step())) {
+		emma_stmt.bind(3, stmt[0].as_float());
+		emma_stmt.bind(4, stmt[1].as_float());
+		emma_stmt.step();
+		ensure(SQLITE_OK == emma_stmt.reset());
+	}
+
+	return ret;
+}
 
 inline FPX get_curve_points(const char* name, double date)
 {
 	FPX result;
 
-	try {
-		sqlite::stmt stmt(::db);
-		stmt.prepare(sql_select);
-		stmt.bind(1, name);
-		stmt.bind(2, date);
+	sqlite::stmt stmt(emma_db);
+	stmt.prepare("SELECT year, rate FROM data "
+		"WHERE curve = ? and date = ? "
+		"ORDER BY year"
+	);
+	stmt.bind(1, name);
+	stmt.bind(2, date);
 
-		while (SQLITE_ROW == stmt.step()) {
-			result.vstack(FPX({ stmt[0].as_float(), stmt[1].as_float()/100 }));
-		}
-	}
-	catch (const std::exception& ex) {
-		XLL_ERROR(ex.what());
+	while (SQLITE_ROW == stmt.step()) {
+		result.vstack(FPX({ stmt[0].as_float(), stmt[1].as_float()/100 }));
 	}
 
 	return result;
@@ -143,16 +147,13 @@ inline FPX get_insert_curve_points(const char* name, double date)
 {
 	FPX result;
 
-	try {
-		result = get_curve_points(name, date);
-		if (!result.size()) {
-			if (insert_curve_date(name, date)) {
-				result = get_curve_points(name, date);
-			}
+	result = get_curve_points(name, date);
+
+	if (!result.size()) {
+		if (SQLITE_DONE == insert_curve_date(name, date)) {
+			copy_emma_data(name, date);
+			result = get_curve_points(name, date);
 		}
-	}
-	catch (const std::exception& ex) {
-		XLL_ERROR(ex.what());
 	}
 
 	return result;
