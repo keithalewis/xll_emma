@@ -1,4 +1,4 @@
-// xll_emma.cpp - Get EMMA data.
+﻿// xll_emma.cpp - Get EMMA data.
 // https://emma.msrb.org/TreasuryData/GetTreasuryDailyYieldCurve?curveDate=mm/dd/yyyy
 // https://emma.msrb.org/ICEData/GetICEDailyYieldCurve?curveDate=
 // https://emma.msrb.org/TradeData/MostRecentTrades
@@ -11,6 +11,45 @@
 #define CATEGORY L"EMMA"
 
 using namespace xll;
+
+// Curve info: Series.Name, Id, EarliestAvailableFilingDate, LatestAvailableFilingDate, Description
+// "Id" LIKE Id%
+// https://emma.msrb.org/ToolsAndResources/BondWaveYieldCurve?daily=True
+// Source, Id, Name, Desc
+#define EMMA_CURVES(X) \
+	X(Bloomberg, CAAA, "BVAL® AAA Callable Municipal Curve.", \
+		"The BVAL® AAA Municipal Curves use dynamic real-time trades and contributed sources to reflect movement in the municipal market.") \
+	X(Bloomberg, BVMB, "BVAL® AAA Municipal Curve.", \
+		"The BVAL® AAA Municipal Curves use dynamic real-time trades and contributed sources to reflect movement in the municipal market.") \
+	X(BondWave, BondWave, "BondWave AA QCurve.", \
+		"The BondWave AA QCurve is a quantitatively derived yield curve built from executed trades offering full data transparency.") \
+	X(ICE, ICE, "ICE US Municipal AAA Curve.", \
+		"The ICE US Municipal AAA Yield Curve is produced continuously and used daily to apply intraday and end-of-day market moves to the majority of the investment grade municipal bond universe") \
+	X(IHSMarkit, AAA, "IHS Markit Municipal Bond AAA Curve.", \
+		"The IHS Markit Municipal Bond AAA Curve is a tax-exempt yield curve that consists of 5% General Obligation AAA debt, callable after 10 years.") \
+	X(MBIS, MBIS, "MBIS AAA Municipal Curve.", \
+		"The MBIS Municipal Benchmark Curve is a tax-exempt investment grade yield curve that is valued directly against pre- and post-trade market data provided by the MSRB.") \
+	X(TradeWeb, TradeWeb, "Tradeweb AAA Municipal Yield Curve.", \
+		"Tradeweb’s Ai-Price for Municipal Bonds addresses the challenge of price discovery by leveraging proprietary machine learning and data science combined with MSRB and Tradeweb proprietary data to price approximately one million municipal bonds at or near traded prices.") \
+	X(Treasury, Treasury, "Treasury Yield Curve Rates.", \
+		"U.S. Treasury Yield Curve Rates are commonly referred to as \"Constant Maturity Treasury\" rates, or CMTs.") \
+
+#define EMMA_CURVE_URL(name) \
+	L"https://emma.msrb.org/" L#name L"Data/Get" L#name L"DailyYieldCurve?curveDate="
+#define EMMA_CURVE_TOPIC(name) \
+	L"https://emma.msrb.org/ToolsAndResources/" L#name L"YieldCurve?daily=True"
+
+// Enums with addresses.
+#define EMMA_CURVE_ENUM(source, id, name, desc) const OPER source##_##id##_enum = OPER({ OPER(L#source), OPER(L#id) });
+EMMA_CURVES(EMMA_CURVE_ENUM)
+#undef EMMA_CURVE_ENUM
+
+#define EMMA_CURVE_ENUM(source, id, name, desc) \
+	XLL_CONST(LPOPER, EMMA_ENUM_##source##_##id, (LPOPER)&source##_##id##_enum, name, "EMMA Enum", EMMA_CURVE_TOPIC(source));
+EMMA_CURVES(EMMA_CURVE_ENUM)
+#undef EMMA_CURVE_ENUM
+
+//XLL_CONST(LPOPER, EMMA_CURVE_TREASURY, OPER(EMMA_CURVE_URL(Treasury)), "US Treasury Constant Maturity Treasury rates.", "EMMA", "");
 
 // TODO: more curves
 const OPER TreasuryDailyYieldCurve("https://emma.msrb.org/TreasuryData/GetTreasuryDailyYieldCurve?curveDate=");
