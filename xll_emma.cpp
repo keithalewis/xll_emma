@@ -41,7 +41,8 @@ using namespace xll;
 	L"https://emma.msrb.org/ToolsAndResources/" L#name L"YieldCurve?daily=True"
 
 // Enums with addresses.
-#define EMMA_CURVE_ENUM(source, id, name, desc) const OPER source##_##id##_enum = OPER({ OPER(L#source), OPER(L#id) });
+#define EMMA_CURVE_ENUM(source, id, name, desc) \
+	const OPER source##_##id##_enum = OPER(L#source) & OPER(L"_") & OPER(L#id);
 EMMA_CURVES(EMMA_CURVE_ENUM)
 #undef EMMA_CURVE_ENUM
 
@@ -206,8 +207,8 @@ inline FPX get_insert_curve_points(std::wstring_view curve, double date)
 AddIn xai_emma_curve(
 	Function(XLL_FP, "xll_emma_curve", "EMMA")
 	.Arguments({
-		Arg(XLL_LPOPER, "enum", "is and enumerated EMMA curve."),
-		Arg(XLL_DOUBLE, "date", "is the date of the curve. Default is previous business day."),
+		Arg(XLL_LPOPER, "enum", "is a value from the EMMA_ENUM() enumeration."),
+		Arg(XLL_DOUBLE, "date", "is the date of the curve. Default is the most recent data available."),
 		})
 	.Category(CATEGORY)
 	.FunctionHelp("EMMA curves as two row array of years and par coupon rates.")
@@ -218,22 +219,9 @@ FP12* WINAPI xll_emma_curve(LPOPER pcurve, double date)
 	static FPX result;
 
 	try {
-		ensure(isStr(*pcurve) || (isMulti(*pcurve) && size(*pcurve) == 2));
+		ensure(isStr(*pcurve));
+		auto curve = view(*pcurve);
 
-		std::wstring curve;
-		if (size(*pcurve) == 1) {
-			// TODO: check if enumeration value
-			if (!contains(*pcurve)) {
-				curve = view(*pcurve);
-				curve.append(L"_");
-				curve.append(view(*pcurve));
-			}
-		}
-		else {
-			curve = view((*pcurve)[0]);
-			curve.append(L"_");
-			curve.append(view((*pcurve)[1]));
-		}
 		if (!date) {
 			date = asNum(Excel(xlfWorkday, Excel(xlfToday), -1));
 		}
