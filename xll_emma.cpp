@@ -130,9 +130,9 @@ int create_emma_db()
 
 	return stmt.exec(R"(
 		CREATE TABLE IF NOT EXISTS curve(
-		source_id TEXT, date FLOAT, year FLOAT, rate FLOAT, 
-		PRIMARY KEY(source_id, date, year))
+		source_id TEXT, date FLOAT, year FLOAT, rate FLOAT) 
 	)");
+//	PRIMARY KEY(source_id, date, year))
 
 }
 Auto<Open> xao_emma_db([] {
@@ -190,7 +190,11 @@ inline FPX get_curve_points(std::wstring_view id, double date)
 
 	// TODO: append and reshape.
 	while (SQLITE_ROW == stmt.step()) {
-		result.vstack(FPX({ stmt[0].as_float(), stmt[1].as_float()/100 }));
+		result.append(stmt[0].as_float())
+			  .append(stmt[1].as_float() / 100);
+	}
+	if (result.size()) {
+		result.resize(result.size()/2, 2);
 	}
 
 	return result;
