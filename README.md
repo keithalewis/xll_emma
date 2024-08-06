@@ -3,8 +3,8 @@
 This add-in grabs Municipal Yield Curves and Indices off the 
 [EMMA](https://emma.msrb.org/ToolsAndResources/MarketIndicators) 
 website and pulls them into Excel.
-Download [`emma.zip`](emma.zip), extract all files, open `emma.xlsx` and `emma.xll` in Excel. 
-You may have to right click on `emma.xll`, select Properties, and click Unblock.
+Download [`emma.zip`](emma.zip), extract all files, then open `emma.xlsx` and `emma.xll` in Excel. 
+You may have to right click on `emma.xll`, select Properties, and click Unblock if you see warnings.
 
 The list of available curves is returned by `EMMMA_ENUM()`.
 Provide one of those as a first argument to `EMMA` and
