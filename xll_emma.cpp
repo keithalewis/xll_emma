@@ -33,7 +33,7 @@ using namespace xll;
 		"The IHS Markit Municipal Bond AAA Curve is a tax-exempt yield curve that consists of 5% General Obligation AAA debt, callable after 10 years.") \
 	X(MBIS, MBIS, "MBIS AAA Municipal Curve.", \
 		"The MBIS Municipal Benchmark Curve is a tax-exempt investment grade yield curve that is valued directly against pre- and post-trade market data provided by the MSRB.") \
-	X(TradeWeb, TradeWeb, "Tradeweb AAA Municipal Yield Curve.", \
+	X(Tradeweb, Tradeweb, "Tradeweb AAA Municipal Yield Curve.", \
 		"Tradeweb’s Ai-Price for Municipal Bonds addresses the challenge of price discovery by leveraging proprietary machine learning and data science combined with MSRB and Tradeweb proprietary data to price approximately one million municipal bonds at or near traded prices.") \
 	X(Treasury, Treasury, "Treasury Yield Curve Rates.", \
 		"U.S. Treasury Yield Curve Rates are commonly referred to as \"Constant Maturity Treasury\" rates, or CMTs.") \
