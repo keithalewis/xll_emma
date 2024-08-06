@@ -7,10 +7,10 @@ Download [`emma.zip`](emma.zip), extract all files, then open `emma.xlsx` and `e
 You may have to right click on `emma.xll`, select Properties, and click Unblock if you see warnings.
 
 The list of available curves is returned by `EMMMA_ENUM()`.
-Provide one of those as a first argument to `EMMA` and
+Provide one of those as a first argument to `EMMA(id, date)` and
 and an optional date argument. The default is the most recent data
 available. It returns a two column array of time in years and par coupons.
 
-Queries are cached to a SQLite database names `emma.db` in the same directory as the add-in.
+Queries are cached to a SQLite database `emma.db` in the same directory as the add-in.
 
 Only Bloomberg provides both non-callable and callable curves.
