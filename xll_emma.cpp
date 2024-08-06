@@ -130,9 +130,9 @@ int create_emma_db()
 
 	return stmt.exec(R"(
 		CREATE TABLE IF NOT EXISTS curve(
-		source_id TEXT, date FLOAT, year FLOAT, rate FLOAT) 
+		source_id TEXT, date FLOAT, year FLOAT, rate FLOAT, 
+		PRIMARY KEY(source_id, date, year))
 	)");
-//	PRIMARY KEY(source_id, date, year))
 
 }
 Auto<Open> xao_emma_db([] {
@@ -160,7 +160,9 @@ int insert_curve_date(const std::wstring_view id, double date)
 INSERT INTO curve(source_id, date, year, rate)
 WITH p AS (SELECT :data AS data)
 SELECT
-    json_extract(series.value, '$.Id') AS source_id,
+   iif(instr(json_extract(series.value, '$.Id'), " "),
+		substr(json_extract(series.value, '$.Id'), 0, instr(json_extract(series.value, '$.Id'), " ")),
+		json_extract(series.value, '$.Id')),
 	:date as date,
     json_extract(point.value, '$.X') AS year,
     json_extract(point.value, '$.Y') AS rate
