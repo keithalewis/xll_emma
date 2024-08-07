@@ -146,7 +146,7 @@ Auto<Open> xao_emma_db([] {
 	return 1;
 });
 
-int insert_curve_date(const std::wstring_view id, double date)
+int insert_id_date(const std::wstring_view id, double date)
 {
 	// TODO: async
 	OPER url = OPER(url_id(id));
@@ -165,7 +165,7 @@ SELECT
 		json_extract(series.value, '$.Id')),
 	:date as date,
     json_extract(point.value, '$.X') AS year,
-    json_extract(point.value, '$.Y') AS rate
+    json_extract(point.value, '$.Y')/100 AS rate
 FROM p, json_each(p.data, '$.Series') AS series,
     json_each(series.value, '$.Points') AS point
 )";
@@ -176,6 +176,47 @@ FROM p, json_each(p.data, '$.Series') AS series,
 
 	return stmt.step();
 }
+
+OPER query_id_info(const std::wstring_view id)
+{
+	OPER result;
+
+	OPER url = OPER(url_id(id));
+	OPER date = Excel(xlfWorkday, Excel(xlfToday), -1);
+	OPER data = Excel(xlfWebservice, url & Excel(xlfText, date, L"mm/dd/yyyy"));
+	// {"Series":[{"Points":[{"X":"1","Y":"2.903"},...]]
+	if (!data || view(data).starts_with(L"{\"Series\":[]")) {
+		return ErrNA; // no data
+	}
+
+	const char* sql = R"(
+WITH p AS (SELECT :data AS data)
+SELECT
+    series.value -> '$.EarliestAvailableFilingDate' AS EarliestAvailableFilingDate
+FROM
+    p,
+    json_each(value, '$.Series') AS series
+WHERE
+    series.value -> '$.Id' LIKE quote(:id) || "%"
+)";
+	sqlite::stmt stmt(emma_db);
+	stmt.prepare(sql);
+	stmt.bind(":data", "?");// view(data));
+	stmt.bind(":id", id);
+	const auto s = stmt.expanded_sql();	
+	ensure (SQLITE_DONE == stmt.step());
+	result.push_bottom(
+		OPER({ OPER("EarliestAvailableFilingDate"), OPER(stmt[0].as_text()) })
+	);
+
+	return result;
+}
+/*
+"Name": "ICE US Municipal AAA Curve",
+"Id" : "ICE US Municipal AAA Curve",
+"EarliestAvailableFilingDate" : "1/4/2010",
+"LatestAvailableFilingDate" : "8/6/2024"
+*/
 
 inline FPX get_curve_points(std::wstring_view id, double date)
 {
@@ -190,10 +231,9 @@ inline FPX get_curve_points(std::wstring_view id, double date)
 	stmt.bind(1, id);
 	stmt.bind(2, date);
 
-	// TODO: append and reshape.
 	while (SQLITE_ROW == stmt.step()) {
 		result.append(stmt[0].as_float())
-			  .append(stmt[1].as_float() / 100);
+			  .append(stmt[1].as_float());
 	}
 	if (result.size()) {
 		result.resize(result.size()/2, 2);
@@ -209,11 +249,37 @@ inline FPX get_insert_curve_points(std::wstring_view curve, double date)
 	result = get_curve_points(curve, date);
 
 	if (!result.size()) {
-		ensure(SQLITE_DONE == insert_curve_date(curve, date));
+		ensure(SQLITE_DONE == insert_id_date(curve, date));
 		result = get_curve_points(curve, date);
 	}
 
 	return result;
+}
+
+AddIn xai_emma_info(
+	Function(XLL_LPOPER, "xll_emma_info", "EMMA.INFO")
+	.Arguments({
+		Arg(XLL_CSTRING, "id", "is a value from the EMMA_ENUM() enumeration.", "\"ICE\"" ),
+		})
+		.Category(CATEGORY)
+	.FunctionHelp("EMMA information for Id.")
+);
+LPOPER WINAPI xll_emma_info(const wchar_t* id)
+{
+#pragma XLLEXPORT
+	static OPER result;
+
+	try {
+		result = ErrNA;
+		ensure(contains(id));
+
+		result = query_id_info(id);
+	}
+	catch (const std::exception& ex) {
+		XLL_ERROR(ex.what());
+	}
+
+	return &result;
 }
 
 AddIn xai_emma_source(
