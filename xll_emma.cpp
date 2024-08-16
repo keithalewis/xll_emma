@@ -116,6 +116,15 @@ const std::wstring& xll_dir()
 		OPER xll = Excel(xlGetName);
 		auto v = xll::view(xll);
 		dir = v.substr(0, 1 + v.find_last_of(L"\\/"));
+		if (dir.ends_with(L"Debug\\")) {
+			dir = dir.substr(0, dir.size() - 6);
+		}
+		else if (dir.ends_with(L"Release\\")) {
+			dir = dir.substr(0, dir.size() - 8);
+		}
+		if (dir.ends_with(L"x64\\")) {
+			dir = dir.substr(0, dir.size() - 4);
+		}
 	}
 
 	return dir;
@@ -190,7 +199,6 @@ inline FPX get_curve_points(std::wstring_view id, double date)
 	stmt.bind(1, id);
 	stmt.bind(2, date);
 
-	// TODO: append and reshape.
 	while (SQLITE_ROW == stmt.step()) {
 		result.append(stmt[0].as_float())
 			  .append(stmt[1].as_float() / 100);
