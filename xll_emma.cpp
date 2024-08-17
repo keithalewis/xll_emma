@@ -7,6 +7,7 @@
 
 #define CATEGORY L"EMMA"
 
+//#include <string_view>
 #include "fms_sqlite/fms_sqlite.h"
 #include "xll24/xll.h"
 
@@ -155,14 +156,22 @@ Auto<Open> xao_emma_db([] {
 	return 1;
 });
 
-int insert_curve_date(const std::wstring_view id, double date)
+//double EarliestAvailableFilingDate(const OPER& data) {}
+//double LatestAvailableFilingDate(const OPER& data) {}
+
+// Insert curve given id and date. Return date of most recent data.
+double insert_curve_date(const std::wstring_view id, double date)
 {
 	// TODO: async
 	OPER url = OPER(url_id(id));
 	OPER data = Excel(xlfWebservice, url & Excel(xlfText, date, L"mm/dd/yyyy"));
 	// {"Series":[{"Points":[{"X":"1","Y":"2.903"},...]]
-	if (!data || view(data).starts_with(L"{\"Series\":[]")) {
-		return 0; // no data
+	while (!data || view(data).starts_with(L"{\"Series\":[]")) {
+		date = asNum(Excel(xlfWorkday, -1));
+		if (date < asNum(Excel(xlfDate, 2015, 1, 1))) { // avoid infinite loop
+			return -1;
+		}
+		data = Excel(xlfWebservice, url & Excel(xlfText, date, L"mm/dd/yyyy"));
 	}
 
 	const char* sql = R"(
@@ -183,7 +192,9 @@ FROM p, json_each(p.data, '$.Series') AS series,
 	stmt.bind(":data", view(data));
 	stmt.bind(":date", date);
 
-	return stmt.step();
+	ensure(SQLITE_DONE == stmt.step());
+
+	return date;
 }
 
 inline FPX get_curve_points(std::wstring_view id, double date)
@@ -217,7 +228,8 @@ inline FPX get_insert_curve_points(std::wstring_view curve, double date)
 	result = get_curve_points(curve, date);
 
 	if (!result.size()) {
-		ensure(SQLITE_DONE == insert_curve_date(curve, date));
+		date = insert_curve_date(curve, date);
+		ensure(date > 0);
 		result = get_curve_points(curve, date);
 	}
 
