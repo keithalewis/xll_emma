@@ -160,14 +160,14 @@ Auto<Open> xao_emma_db([] {
 //double LatestAvailableFilingDate(const OPER& data) {}
 
 // Insert curve given id and date. Return date of most recent data.
-double insert_curve_date(const std::wstring_view id, double date)
+double insert_id_date(const std::wstring_view id, double date)
 {
 	// TODO: async
 	OPER url = OPER(url_id(id));
 	OPER data = Excel(xlfWebservice, url & Excel(xlfText, date, L"mm/dd/yyyy"));
 	// {"Series":[{"Points":[{"X":"1","Y":"2.903"},...]]
 	while (!data || view(data).starts_with(L"{\"Series\":[]")) {
-		date = asNum(Excel(xlfWorkday, -1));
+		date = asNum(Excel(xlfWorkday, date, -1));
 		if (date < asNum(Excel(xlfDate, 2015, 1, 1))) { // avoid infinite loop
 			return -1;
 		}
@@ -228,7 +228,7 @@ inline FPX get_insert_curve_points(std::wstring_view curve, double date)
 	result = get_curve_points(curve, date);
 
 	if (!result.size()) {
-		date = insert_curve_date(curve, date);
+		date = insert_id_date(curve, date);
 		ensure(date > 0);
 		result = get_curve_points(curve, date);
 	}
@@ -308,26 +308,25 @@ const wchar_t* WINAPI xll_emma_help(const wchar_t* id)
 AddIn xai_emma_curve(
 	Function(XLL_FP, "xll_emma_curve", "EMMA")
 	.Arguments({
-		Arg(XLL_LPOPER, "id", "is a value from the EMMA_ENUM() enumeration."),
+		Arg(XLL_CSTRING, "id", "is a value from the EMMA_ENUM() enumeration."),
 		Arg(XLL_DOUBLE, "date", "is the date of the curve. Default is the most recent data available."),
 		})
 	.Category(CATEGORY)
 	.FunctionHelp("EMMA curves as two row array of years and par coupon rates.")
 );
-FP12* WINAPI xll_emma_curve(LPOPER pid, double date)
+FP12* WINAPI xll_emma_curve(const wchar_t* id, double date)
 {
 #pragma XLLEXPORT
 	static FPX result;
 
 	try {
-		ensure(isStr(*pid));
-		ensure(contains(view(*pid)));
+		ensure(contains(id));
 
 		if (!date) {
 			date = asNum(Excel(xlfWorkday, Excel(xlfToday), -1));
 		}
 
-		result = get_insert_curve_points(view(*pid), date);
+		result = get_insert_curve_points(id, date);
 	}
 	catch (const std::exception& ex) {
 		XLL_ERROR(ex.what());
@@ -336,4 +335,45 @@ FP12* WINAPI xll_emma_curve(LPOPER pid, double date)
 	}
 
 	return result.get();
+}
+
+AddIn xai_emma_date(
+	Function(XLL_DOUBLE, "xll_emma_date", "EMMA.DATE")
+	.Arguments({
+		Arg(XLL_CSTRING, "id", "is a value from the EMMA_ENUM() enumeration."),
+		Arg(XLL_DOUBLE, "date", "is the date of the date. Default is the most recent data available."),
+		})
+		.Category(CATEGORY)
+	.FunctionHelp("Return most recent date EMMA has for id.")
+);
+double WINAPI xll_emma_date(const wchar_t* id, double date)
+{
+#pragma XLLEXPORT
+	try {
+		ensure(contains(id));
+
+		if (!date) {
+			date = asNum(Excel(xlfWorkday, Excel(xlfToday), -1));
+		}
+		sqlite::stmt stmt(emma_db);
+		stmt.prepare("SELECT date "
+			"FROM curve "
+			"WHERE source_id = ? AND date <= ? "
+			"ORDER BY date DESC");
+		stmt.bind(1, id);
+		stmt.bind(2, date);
+		if (SQLITE_ROW == stmt.step()) {
+			date = stmt[0].as_float();
+		}
+		else {
+			date = insert_id_date(id, date);
+		}
+	}
+	catch (const std::exception& ex) {
+		XLL_ERROR(ex.what());
+
+		return -1;
+	}
+
+	return date;
 }
