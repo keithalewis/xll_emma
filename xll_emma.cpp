@@ -9,7 +9,7 @@
 
 //#include <string_view>
 #include "fms_sqlite/fms_sqlite.h"
-#include "xll24/xll.h"
+#include "xll24/include/xll.h"
 
 using namespace xll;
 
@@ -159,6 +159,26 @@ Auto<Open> xao_emma_db([] {
 //double EarliestAvailableFilingDate(const OPER& data) {}
 //double LatestAvailableFilingDate(const OPER& data) {}
 
+// Most recent date EMMA has for id prior or equal to date.
+double emma_id_date(const std::wstring_view id, double date)
+{
+	double id_date = -1;
+
+	sqlite::stmt stmt(emma_db);
+	stmt.prepare("SELECT date "
+		"FROM curve "
+		"WHERE source_id = ? AND date <= ? "
+		"ORDER BY date DESC "
+		"LIMIT 1");
+	stmt.bind(1, id);
+	stmt.bind(2, date);
+	if (SQLITE_ROW == stmt.step()) {
+		id_date = stmt[0].as_float();
+	}
+
+	return id_date;
+}
+
 // Insert curve given id and date. Return date of most recent data.
 double insert_id_date(const std::wstring_view id, double date)
 {
@@ -170,6 +190,9 @@ double insert_id_date(const std::wstring_view id, double date)
 		date = asNum(Excel(xlfWorkday, date, -1));
 		if (date < asNum(Excel(xlfDate, 2015, 1, 1))) { // avoid infinite loop
 			return -1;
+		}
+		if (date == emma_id_date(id, date)) {
+			return date;
 		}
 		data = Excel(xlfWebservice, url & Excel(xlfText, date, L"mm/dd/yyyy"));
 	}
@@ -355,24 +378,10 @@ double WINAPI xll_emma_date(const wchar_t* id, double date)
 		if (!date) {
 			date = asNum(Excel(xlfWorkday, Excel(xlfToday), -1));
 		}
-		sqlite::stmt stmt(emma_db);
-		stmt.prepare("SELECT date "
-			"FROM curve "
-			"WHERE source_id = ? AND date <= ? "
-			"ORDER BY date DESC");
-		stmt.bind(1, id);
-		stmt.bind(2, date);
-		if (SQLITE_ROW == stmt.step()) {
-			date = stmt[0].as_float();
-		}
-		else {
-			date = insert_id_date(id, date);
-		}
+		date = emma_id_date(id, date);
 	}
 	catch (const std::exception& ex) {
 		XLL_ERROR(ex.what());
-
-		return -1;
 	}
 
 	return date;
