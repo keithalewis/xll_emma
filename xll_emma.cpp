@@ -376,7 +376,7 @@ double WINAPI xll_emma_date(const wchar_t* id, double date)
 		ensure(contains(id));
 
 		if (!date) {
-			date = asNum(Excel(xlfWorkday, Excel(xlfToday), -1));
+			date = asNum(Excel(xlfToday));
 		}
 		date = emma_id_date(id, date);
 	}
