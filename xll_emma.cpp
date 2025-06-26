@@ -337,7 +337,7 @@ AddIn xai_emma_curve(
 	.Category(CATEGORY)
 	.FunctionHelp("EMMA curves as two row array of years and par coupon rates.")
 );
-FP12* WINAPI xll_emma_curve(const wchar_t* id, double date)
+_FP12* WINAPI xll_emma_curve(const wchar_t* id, double date)
 {
 #pragma XLLEXPORT
 	static FPX result;
